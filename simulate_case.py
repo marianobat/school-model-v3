@@ -88,6 +88,9 @@ class Params:
     # Continuidad de Kinder a 1° (aplica al paso K5 -> G1)
     tasa_cont_k_to_g1: float = 0.95
 
+    # (Opcional) Cobranza/morosidad: si tu app lo pasa, DEBE estar acá
+    tasa_cobro: float = 1.0                # 1.0 = 100%
+
 def simulate(par: Params) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     G = np.zeros((par.anios, N_GRADES))
     Div = np.zeros((par.anios, N_GRADES), dtype=int)
