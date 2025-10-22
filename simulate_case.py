@@ -4,6 +4,11 @@ import numpy as np
 import pandas as pd
 from typing import Tuple, Dict, Any
 
+# Orden oficial de grados (incluye K3-K5, ver §2)
+GRADE_NAMES = ["K3", "K4", "K5"] + [f"G{g}" for g in range(1, 13)]
+GRADE_INDEX = {name: i for i, name in enumerate(GRADE_NAMES)}
+N_GRADES = len(GRADE_NAMES)  # 15
+
 @dataclass
 class Params:
     # --- Horizonte y estado inicial ---
@@ -22,6 +27,14 @@ class Params:
     trigger_auto_aula: bool = True
     regla_dos_div: bool = True
 
+    # --- Crecimiento manual de aulas ---
+    manual_crecimiento: bool = False
+    solo_manual: bool = False
+    extra_div_k3_per_year: int = 0
+    extra_div_k4_per_year: int = 0
+    extra_div_k5_per_year: int = 0
+    extra_div_g1_per_year: int = 0
+    
     # --- Demanda y Marketing ---
     prop_mkt: float = 0.05
     mkt_floor: float = 2000.0
@@ -65,9 +78,19 @@ class Params:
     k_comunicacion: float = 0.05
     k_diferenciacion: float = 0.05
 
+    # --- Grados y admisiones por grados de entrada ---
+    # Proporciones de candidatos a grados de entrada (deben sumar 1.0)
+    prop_cand_k3: float = 0.25
+    prop_cand_k4: float = 0.25
+    prop_cand_k5: float = 0.25
+    prop_cand_g1: float = 0.25
+
+    # Continuidad de Kinder a 1° (aplica al paso K5 -> G1)
+    tasa_cont_k_to_g1: float = 0.95
+
 def simulate(par: Params) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    G = np.zeros((par.anios, 12))
-    Div = np.zeros((par.anios, 12), dtype=int)
+    G = np.zeros((par.anios, N_GRADES))
+    Div = np.zeros((par.anios, N_GRADES), dtype=int)
     calidad = np.zeros(par.anios)
     Demanda = np.zeros(par.anios)
     Marketing = np.zeros(par.anios)
@@ -93,6 +116,24 @@ def simulate(par: Params) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     Marketing[0] = max(par.mkt_floor, par.prop_mkt * fact_prev)
 
     for k in range(par.anios):
+        # --- Crecimiento manual de aulas ---
+        if par.manual_crecimiento:
+            add_map = {
+                GRADE_INDEX["K3"]: par.extra_div_k3_per_year,
+                GRADE_INDEX["K4"]: par.extra_div_k4_per_year,
+                GRADE_INDEX["K5"]: par.extra_div_k5_per_year,
+                GRADE_INDEX["G1"]: par.extra_div_g1_per_year,
+            }
+            nuevas = 0
+            for idx, add in add_map.items():
+                if add > 0:
+                    Div[k, idx] += int(add)
+                    nuevas += int(add)
+            if nuevas > 0:
+                inv_infra[k] += par.capex_aula * nuevas  # CAPEX por cada aula nueva
+        
+        # Si es "solo_manual", apagamos el trigger automático
+        auto_trigger = (not par.solo_manual) and par.trigger_auto_aula
         alumnos_k = float(G[k, :].sum())
         if k > 0:
             Demanda[k] = max(
@@ -114,6 +155,51 @@ def simulate(par: Params) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         candidatos_pago[k] = Marketing[k] / max(CAC[k], 1e-9)
         candidatos_organico[k] = par.k_calidad_candidatos * (calidad[k-1] if k > 0 else calidad[0])
         nuevos_candidatos[k] = max(0.0, candidatos_pago[k] + candidatos_organico[k])
+
+        # --- Reparto de candidatos a grados de entrada ---
+        # Normalizamos por seguridad para que sumen 1.0
+        w_k3 = max(par.prop_cand_k3, 0.0)
+        w_k4 = max(par.prop_cand_k4, 0.0)
+        w_k5 = max(par.prop_cand_k5, 0.0)
+        w_g1 = max(par.prop_cand_g1, 0.0)
+        wsum = w_k3 + w_k4 + w_k5 + w_g1
+        if wsum <= 0:
+            w_k3 = w_k4 = w_k5 = w_g1 = 0.25
+            wsum = 1.0
+        w_k3, w_k4, w_k5, w_g1 = [w/wsum for w in (w_k3, w_k4, w_k5, w_g1)]
+        
+        cand_k3 = nuevos_candidatos[k] * w_k3
+        cand_k4 = nuevos_candidatos[k] * w_k4
+        cand_k5 = nuevos_candidatos[k] * w_k5
+        cand_g1 = nuevos_candidatos[k] * w_g1
+
+        # Índices de grados de entrada
+        iK3 = GRADE_INDEX["K3"]; iK4 = GRADE_INDEX["K4"]; iK5 = GRADE_INDEX["K5"]; iG1 = GRADE_INDEX["G1"]
+        
+        cap_k3 = Div[k, iK3] * par.cupo_maximo
+        cap_k4 = Div[k, iK4] * par.cupo_maximo
+        cap_k5 = Div[k, iK5] * par.cupo_maximo
+        cap_g1 = Div[k, iG1] * par.cupo_maximo
+        
+        # Política de selección por grado
+        adm_des_k3 = min(par.politica_seleccion * cand_k3, cap_k3)
+        adm_des_k4 = min(par.politica_seleccion * cand_k4, cap_k4)
+        adm_des_k5 = min(par.politica_seleccion * cand_k5, cap_k5)
+        adm_des_g1 = min(par.politica_seleccion * cand_g1, cap_g1)
+        
+        # Gap de demanda total puede acotar el total de admitidos (en bloque)
+        gap_demanda = max(Demanda[k] - float(G[k, :].sum()), 0.0)
+        adm_total_deseado = adm_des_k3 + adm_des_k4 + adm_des_k5 + adm_des_g1
+        escala = 1.0 if adm_total_deseado <= 0 else min(1.0, gap_demanda / adm_total_deseado)
+        
+        adm_k3 = adm_des_k3 * escala
+        adm_k4 = adm_des_k4 * escala
+        adm_k5 = adm_des_k5 * escala
+        adm_g1 = adm_des_g1 * escala
+        
+        # Guarda "admitidos" de la fila para reportes agregados (suma de todos)
+        admitidos[k] = adm_k3 + adm_k4 + adm_k5 + adm_g1
+        admitidos_deseados[k] = adm_total_deseado
 
         capacidad_g1 = int(Div[k, 0] * par.cupo_maximo)
         gap_demanda = max(Demanda[k] - alumnos_k, 0.0)
@@ -177,15 +263,45 @@ def simulate(par: Params) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         tasa_bajas[k] = tasa
         bajas_tot = tasa * alumnos_k
 
-        next_row = np.zeros(12)
-        next_row[0] = admitidos[k]
-        for gi in range(1, 12):
-            base = G[k, gi-1]
-            if alumnos_k > 0:
-                bajas_prev = (G[k, gi-1] / alumnos_k) * bajas_tot
-            else:
-                bajas_prev = 0.0
-            next_row[gi] = max(base - bajas_prev, 0.0)
+        next_row = np.zeros(N_GRADES)
+        
+        # Ingresos por admisión externa a grados de entrada
+        next_row[iK3] += adm_k3
+        next_row[iK4] += adm_k4
+        next_row[iK5] += adm_k5
+        next_row[iG1] += adm_g1
+        
+        # Bajas totales del año (ya calculaste 'tasa' y 'bajas_tot' antes)
+        alumnos_k = float(G[k, :].sum())
+        def bajas_por(grado_idx):
+            return 0.0 if alumnos_k <= 0 else (G[k, grado_idx] / alumnos_k) * bajas_tot
+        
+        # Kinder: K3 -> K4 ; K4 -> K5 ; K5 -> G1 (con continuidad)
+        iG2 = GRADE_INDEX["G2"]
+        iG12 = GRADE_INDEX["G12"]
+        
+        # K3 -> K4
+        k3_net = max(G[k, iK3] - bajas_por(iK3), 0.0)
+        next_row[iK4] += k3_net
+        
+        # K4 -> K5
+        k4_net = max(G[k, iK4] - bajas_por(iK4), 0.0)
+        next_row[iK5] += k4_net
+        
+        # K5 -> G1 con continuidad
+        k5_net = max(G[k, iK5] - bajas_por(iK5), 0.0)
+        next_row[iG1] += par.tasa_cont_k_to_g1 * k5_net
+        
+        # Primaria/Secundaria: G1 -> G2 -> ... -> G12
+        for g in range(1, 13):
+            name_src = f"G{g}"
+            idx_src = GRADE_INDEX[name_src]
+            if g < 12:
+                idx_dst = GRADE_INDEX[f"G{g+1}"]
+                net = max(G[k, idx_src] - bajas_por(idx_src), 0.0)
+                next_row[idx_dst] += net
+            # G12 egresa (no se suma)
+
         if k < par.anios - 1:
             G[k+1, :] = next_row
             Div[k+1, :] = Div[k, :]
