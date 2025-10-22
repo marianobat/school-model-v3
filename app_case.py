@@ -21,9 +21,9 @@ with st.sidebar:
     st.header("Parámetros")
     with st.expander("⏳ Horizonte y Estado inicial", expanded=True):
         anios = st.number_input("Años a simular", 3, 30, 10, 1)
-        alumnos_inicial_por_grado = st.slider("Alumnos iniciales por grado", 0, 50, 20, 1)
-        demanda_inicial = st.slider("Demanda inicial (pool familias)", 0, 2000, 300, 25)
-        divisiones_iniciales = st.slider("Divisiones iniciales por grado", 1, 5, 1, 1)
+        alumnos_inicial_por_grado = st.slider("Alumnos iniciales por grado", 0, 50, 25, 1)
+        demanda_inicial = st.slider("Demanda inicial (pool familias)", 0, 3000, 800, 50)
+        divisiones_iniciales = st.slider("Divisiones iniciales por grado", 1, 5, 2, 1)
 
     with st.expander("🏫 Capacidad e Infraestructura", expanded=False):
         cupo_optimo = st.slider("Cupo óptimo por aula", 15, 35, 25, 1)
@@ -46,9 +46,9 @@ with st.sidebar:
         k_calidad_candidatos = st.slider("Efecto de calidad en orgánico", 0.0, 2.0, 0.8, 0.1)
 
     with st.expander("💵 Precio y Retención", expanded=False):
-        cuota_mensual = st.number_input("Cuota mensual", 0.0, 1000.0, 50.0, 1.0)
+        cuota_mensual = st.number_input("Cuota mensual", 0.0, 1000.0, 250.0, 1.0)
         meses_cobro = st.slider("Meses de cobro/año", 1, 12, 10, 1)
-        ref_precio = st.number_input("Precio de referencia", 1.0, 2000.0, 50.0, 1.0)
+        ref_precio = st.number_input("Precio de referencia", 1.0, 2000.0, 300.0, 1.0)
         k_bajas_precio = st.slider("Sensibilidad bajas al precio", 0.0, 0.5, 0.08, 0.01)
         k_precio_cac = st.slider("Sensibilidad CAC al precio", 0.0, 1.0, 0.5, 0.05)
         tasa_bajas_base = st.slider("Tasa de bajas base", 0.0, 0.2, 0.04, 0.01)
@@ -202,12 +202,18 @@ tabs = st.tabs([
 
 # --- 📈 TAB 1: Evolución general ---
 with tabs[0]:
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Alumnos actuales", f"{int(df['alumnos_totales'].iloc[-1])}")
-    col2.metric("Calidad (último año)", f"{df['calidad'].iloc[-1]:.2f}")
-    col3.metric("Aulas totales", f"{int(df['AulasTotales'].iloc[-1])}")
-    cap_bind = "Sí" if df['capacidad_binding'].iloc[-1] == 1 else "No"
-    col4.metric("¿Limita la Capacidad?", cap_bind)
+    # --- KPIs con delta ---
+    alum_ini, alum_fin = int(df["alumnos_totales"].iloc[0]), int(df["alumnos_totales"].iloc[-1])
+    cal_ini, cal_fin = float(df["calidad"].iloc[0]), float(df["calidad"].iloc[-1])
+    aulas_ini, aulas_fin = int(df["AulasTotales"].iloc[0]), int(df["AulasTotales"].iloc[-1])
+    margen_series = df["facturacion"] - df["costos_totales"]
+    marg_ini, marg_fin = float(margen_series.iloc[0]), float(margen_series.iloc[-1])
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Alumnos (último año)", f"{alum_fin}", delta=f"{alum_fin - alum_ini:+d}")
+    c2.metric("Calidad (último año)", f"{cal_fin:.2f}", delta=f"{(cal_fin - cal_ini):+.2f}")
+    c3.metric("Aulas totales", f"{aulas_fin}", delta=f"{aulas_fin - aulas_ini:+d}")
+    c4.metric("Margen (último año)", f"{marg_fin:,.0f}", delta=f"{(marg_fin - marg_ini):+,.0f}")
 
     st.subheader("Evolución de alumnos")
     st.line_chart(df.set_index("anio")[["alumnos_totales"]])
@@ -254,15 +260,31 @@ with tabs[2]:
 
     st.subheader("Distribución de alumnos por curso")
 
-    G = extras["G"]
-    # Orden explícito de columnas del heatmap
-    grades = ["K3", "K4", "K5"] + [f"G{g}" for g in range(1, 13)]
+    # Orden ideal de grados
+    ideal_grades = ["K3", "K4", "K5"] + [f"G{g}" for g in range(1, 13)]
 
-    heat_df = pd.DataFrame(G, columns=grades)
+    # Si el modelo expone nombres de grados, usalos; si no, inferí por columnas
+    grade_names = extras.get("grade_names", None)
+    if grade_names is None:
+        # Inferencia: si G tiene 15 columnas asumimos K3..K5 + G1..G12; si tiene 12 columnas: G1..G12
+        ncols = extras["G"].shape[1]
+        if ncols == 15:
+            grade_names = ideal_grades[:]                      # K3..K5, G1..G12
+        else:
+            grade_names = [f"G{g}" for g in range(1, 13)]      # solo G1..G12
+
+    # Reordenar en el orden ideal (filtra si faltan)
+    ordered = [g for g in ideal_grades if g in grade_names]
+
+    G = extras["G"]
+    # Asegurar consistencia de columnas con 'ordered'
+    heat_df = pd.DataFrame(G, columns=grade_names).reindex(columns=ordered)
     heat_df["anio"] = df["anio"]
 
-    # Pasamos a formato largo
     long = heat_df.melt(id_vars="anio", var_name="grado", value_name="alumnos")
+
+    # Categórico ordenado para que G10..G12 queden al final y K3..K5 al inicio
+    long["grado"] = pd.Categorical(long["grado"], categories=ordered, ordered=True)
 
     heatmap = (
         alt.Chart(long)
@@ -275,7 +297,6 @@ with tabs[2]:
         )
         .properties(height=320)
     )
-
     st.altair_chart(heatmap, use_container_width=True)
 
 
