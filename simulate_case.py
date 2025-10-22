@@ -13,9 +13,9 @@ N_GRADES = len(GRADE_NAMES)  # 15
 class Params:
     # --- Horizonte y estado inicial ---
     anios: int = 10
-    alumnos_inicial_por_grado: int = 20
-    demanda_inicial: int = 300
-    divisiones_iniciales: int = 1
+    alumnos_inicial_por_grado: int = 25
+    demanda_inicial: int = 1500
+    divisiones_iniciales: int = 2
 
     # --- Capacidad y aulas ---
     cupo_optimo: int = 25
@@ -47,7 +47,7 @@ class Params:
     piso_demanda_gap: int = 20                # Demanda >= alumnos + piso
 
     # --- Precio y Retención ---
-    cuota_mensual: float = 50.0
+    cuota_mensual: float = 300.0
     meses_cobro: int = 10
     ref_precio: float = 50.0
     k_bajas_precio: float = 0.08
