@@ -99,6 +99,62 @@ st.line_chart(df.set_index("anio")[["calidad","tasa_bajas"]])
 st.subheader("Candidatos: pagados vs orgánicos")
 st.line_chart(df.set_index("anio")[["candidatos_pago","candidatos_organico"]])
 
+# --- NUEVO: Facturación, costos fijos y margen de gestión ---
+st.subheader("Facturación, costos fijos y margen de gestión")
+
+# Costos fijos = sueldos_docentes + sueldos_no_docentes (este último es un parámetro constante)
+costos_fijos = df["sueldos_docentes"] + extras["params"]["sueldos_no_docentes"]
+
+# Margen de gestión = facturación - costos_totales (como está definido en el modelo)
+margen_gestion = df["facturacion"] - df["costos_totales"]
+
+fin_df = (
+    pd.DataFrame({
+        "anio": df["anio"],
+        "Facturación": df["facturacion"],
+        "Costos fijos": costos_fijos,
+        "Margen de gestión": margen_gestion
+    })
+    .set_index("anio")
+)
+
+st.line_chart(fin_df)
+
+# --- NUEVO: Solapa con mapa de calor de alumnos por curso ---
+st.subheader("Distribución de alumnos por curso")
+
+tabs = st.tabs(["Mapa de calor (Alumnos por grado)"])
+
+with tabs[0]:
+    import altair as alt
+
+    # extras["G"] tiene la matriz (anios x 12) de alumnos por grado
+    G = extras["G"]  # shape: (anios, 12)
+    grades = [f"G{g}" for g in range(1, 13)]
+
+    heat_df = pd.DataFrame(G, columns=grades)
+    heat_df["anio"] = df["anio"]
+
+    # Pasamos a formato largo para el heatmap
+    long = heat_df.melt(id_vars="anio", var_name="grado", value_name="alumnos")
+
+    # Mapa de calor con Altair
+    heatmap = (
+        alt.Chart(long)
+        .mark_rect()
+        .encode(
+            x=alt.X("grado:O", title="Grado"),
+            y=alt.Y("anio:O", title="Año"),
+            color=alt.Color("alumnos:Q", title="Alumnos"),
+            tooltip=["anio", "grado", "alumnos"]
+        )
+        .properties(height=320)
+    )
+
+    st.altair_chart(heatmap, use_container_width=True)
+
+
+
 with st.expander("📊 Ver tabla completa"):
     st.dataframe(df)
 
