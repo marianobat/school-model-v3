@@ -27,7 +27,11 @@ class Params:
     mkt_floor: float = 2000.0
     cac_base: float = 200.0
     k_saturacion: float = 0.5
-    k_calidad_candidatos: float = 0.8
+    k_calidad_candidatos: float = 0.8        
+    # Dinámica de Demanda (nuevos controles)
+    beta_demanda_calidad: float = 10.0        # Δdemanda por punto de calidad
+    delta_demanda_saturacion: float = 0.05    # caída por alumno actual
+    piso_demanda_gap: int = 20                # Demanda >= alumnos + piso
 
     # --- Precio y Retención ---
     cuota_mensual: float = 50.0
@@ -91,7 +95,12 @@ def simulate(par: Params) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     for k in range(par.anios):
         alumnos_k = float(G[k, :].sum())
         if k > 0:
-            Demanda[k] = max(Demanda[k-1] + 10*calidad[k-1] - 0.05*alumnos_k, alumnos_k + 20)
+            Demanda[k] = max(
+                Demanda[k-1]
+                + par.beta_demanda_calidad * (calidad[k-1] if k > 0 else par.calidad_base)
+                - par.delta_demanda_saturacion * alumnos_k,
+                alumnos_k + par.piso_demanda_gap
+            )
 
         saturacion = 0.0 if Demanda[k] <= 0 else (alumnos_k / max(Demanda[k], 1e-9))
         CAC[k] = par.cac_base * (1.0 + par.k_saturacion * saturacion)
