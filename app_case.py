@@ -9,6 +9,15 @@ st.set_page_config(page_title="Simulador Escolar – Calidad Dinámica", layout=
 st.title("Simulador de Sistema Escolar • Calidad, Demanda y Capacidad")
 
 with st.sidebar:
+    st.markdown("### 🎛️ Presets de escenarios")
+    preset = st.selectbox("Elegí un escenario", [
+        "Personalizado",
+        "Exitoso",
+        "Estable",
+        "Pérdida por precio alto",
+        "Pérdida por baja calidad"
+    ])
+    
     st.header("Parámetros")
     with st.expander("⏳ Horizonte y Estado inicial", expanded=True):
         anios = st.number_input("Años a simular", 3, 30, 10, 1)
@@ -25,6 +34,9 @@ with st.sidebar:
         mantenimiento_prop = st.slider("Mantenimiento (% facturación)", 0.0, 0.2, 0.03, 0.01)
         trigger_auto_aula = st.checkbox("Construcción endógena de aulas", True)
         regla_dos_div = st.checkbox("Disparar si admitidos deseados ≥ 2*cupo_max", True)
+        beta_demanda_calidad = st.slider("Δ Demanda por punto de calidad", 0.0, 30.0, 10.0, 0.5)
+        delta_demanda_saturacion = st.slider("Caída de Demanda por alumno actual", 0.0, 0.2, 0.05, 0.01)
+        piso_demanda_gap = st.slider("Piso de Demanda sobre matrícula (gap)", 0, 200, 20, 5)
 
     with st.expander("📣 Demanda y Marketing", expanded=False):
         prop_mkt = st.slider("Proporción de marketing sobre facturación", 0.0, 0.2, 0.05, 0.01)
@@ -63,6 +75,77 @@ with st.sidebar:
         politica_seleccion = st.slider("Política de selección (admitidos/candidatos)", 0.0, 1.0, 0.7, 0.05)
         admitidos_max_abs = st.number_input("Tope absoluto de admitidos (-1 desactiva)", -1, 2000, -1, 1)
 
+
+# ---- Aplicar preset (sobrescribe variables leídas de sliders) ----
+if preset == "Exitoso":
+    prop_mkt = 0.10
+    k_calidad_candidatos = 1.0
+    cuota_mensual = ref_precio * 1.0
+    k_precio_cac = 0.3
+    tasa_bajas_base = 0.03
+    k_bajas_calidad = 0.10
+    calidad_base = 0.8
+    k_hacinamiento = 1.2
+    gamma_hacinamiento = 1.3
+    cupo_optimo = 25
+    cupo_maximo = 30
+    trigger_auto_aula = True
+    politica_seleccion = 0.7
+    beta_demanda_calidad = 15.0
+    delta_demanda_saturacion = 0.03
+
+elif preset == "Estable":
+    prop_mkt = 0.05
+    k_calidad_candidatos = 0.8
+    cuota_mensual = ref_precio * 1.0
+    k_precio_cac = 0.5
+    tasa_bajas_base = 0.04
+    k_bajas_calidad = 0.12
+    calidad_base = 0.7
+    k_hacinamiento = 1.0
+    gamma_hacinamiento = 1.3
+    cupo_optimo = 25
+    cupo_maximo = 30
+    trigger_auto_aula = True
+    politica_seleccion = 0.7
+    beta_demanda_calidad = 10.0
+    delta_demanda_saturacion = 0.05
+
+elif preset == "Pérdida por precio alto":
+    prop_mkt = 0.04
+    k_calidad_candidatos = 0.6
+    cuota_mensual = ref_precio * 1.4
+    k_precio_cac = 0.8
+    tasa_bajas_base = 0.05
+    k_bajas_calidad = 0.14
+    calidad_base = 0.65
+    k_hacinamiento = 0.9
+    gamma_hacinamiento = 1.3
+    cupo_optimo = 25
+    cupo_maximo = 30
+    trigger_auto_aula = False
+    politica_seleccion = 0.8
+    beta_demanda_calidad = 8.0
+    delta_demanda_saturacion = 0.08
+
+elif preset == "Pérdida por baja calidad":
+    prop_mkt = 0.03
+    k_calidad_candidatos = 0.4
+    cuota_mensual = ref_precio * 0.95
+    k_precio_cac = 0.4
+    tasa_bajas_base = 0.06
+    k_bajas_calidad = 0.20
+    calidad_base = 0.5
+    k_hacinamiento = 1.4
+    gamma_hacinamiento = 1.5
+    cupo_optimo = 22
+    cupo_maximo = 28
+    trigger_auto_aula = False
+    politica_seleccion = 0.9
+    beta_demanda_calidad = 6.0
+    delta_demanda_saturacion = 0.10
+
+
 p = Params(
     anios=anios, alumnos_inicial_por_grado=alumnos_inicial_por_grado,
     demanda_inicial=demanda_inicial, divisiones_iniciales=divisiones_iniciales,
@@ -79,6 +162,9 @@ p = Params(
     nivel_articulacion=nivel_articulacion, nivel_comunicacion=nivel_comunicacion, nivel_diferenciacion=nivel_diferenciacion,
     k_articulacion=k_articulacion, k_comunicacion=k_comunicacion, k_diferenciacion=k_diferenciacion,
     politica_seleccion=politica_seleccion, admitidos_max_abs=admitidos_max_abs,
+    beta_demanda_calidad=beta_demanda_calidad,
+    delta_demanda_saturacion=delta_demanda_saturacion,
+    piso_demanda_gap=piso_demanda_gap,
 )
 
 df, extras = simulate(p)
@@ -105,8 +191,18 @@ with tabs[0]:
     st.subheader("Calidad vs Tasa de bajas")
     st.line_chart(df.set_index("anio")[["calidad","tasa_bajas"]])
 
-    st.subheader("Candidatos: pagados vs orgánicos")
-    st.line_chart(df.set_index("anio")[["candidatos_pago","candidatos_organico"]])
+    st.subheader("Demanda potencial, candidatos y aceptados")
+    cand_total = df["nuevos_candidatos"]
+    plot_df = (
+        pd.DataFrame({
+            "anio": df["anio"],
+            "Demanda potencial": df["Demanda"],
+            "Candidatos": cand_total,
+            "Aceptados": df["admitidos"]
+        })
+        .set_index("anio")
+    )
+    st.line_chart(plot_df)
 
 
 # --- 💰 TAB 2: Finanzas ---
