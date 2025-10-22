@@ -161,10 +161,8 @@ p = Params(
     k_selectividad=k_selectividad, alpha_calidad=alpha_calidad,
     nivel_articulacion=nivel_articulacion, nivel_comunicacion=nivel_comunicacion, nivel_diferenciacion=nivel_diferenciacion,
     k_articulacion=k_articulacion, k_comunicacion=k_comunicacion, k_diferenciacion=k_diferenciacion,
-    politica_seleccion=politica_seleccion, admitidos_max_abs=admitidos_max_abs,
-    beta_demanda_calidad=beta_demanda_calidad,
-    delta_demanda_saturacion=delta_demanda_saturacion,
-    piso_demanda_gap=piso_demanda_gap,
+    politica_seleccion=politica_seleccion, admitidos_max_abs=admitidos_max_abs, beta_demanda_calidad=beta_demanda_calidad, 
+    delta_demanda_saturacion=delta_demanda_saturacion, piso_demanda_gap=piso_demanda_gap,
 )
 
 df, extras = simulate(p)
