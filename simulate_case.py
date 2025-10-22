@@ -214,5 +214,17 @@ def simulate(par: Params) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         "costos_totales": costos,
         "resultado": resultado,
     })
+        # --- Redondeo de variables de conteo ---
+    cols_round = [
+        "alumnos_totales", "nuevos_candidatos", "candidatos_pago",
+        "candidatos_organico", "admitidos_deseados", "admitidos",
+        "Demanda", "DivG1", "AulasTotales"
+    ]
+    for c in cols_round:
+        if c in df.columns:
+            df[c] = df[c].round().astype(int)
+
+    # También redondeamos la matriz G (alumnos por grado)
+    G = np.round(G).astype(int)
     extras = {"G": G, "Div": Div, "params": asdict(par)}
     return df, extras
