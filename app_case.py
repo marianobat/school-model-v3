@@ -74,7 +74,27 @@ with st.sidebar:
     with st.expander("📝 Admisiones", expanded=False):
         politica_seleccion = st.slider("Política de selección (admitidos/candidatos)", 0.0, 1.0, 0.7, 0.05)
         admitidos_max_abs = st.number_input("Tope absoluto de admitidos (-1 desactiva)", -1, 2000, -1, 1)
+        st.caption("Admisiones solo en Kinder (K3-K5) y 1° grado. Ajustá el reparto de candidatos:")
+        colA, colB = st.columns(2)
+        with colA:
+            prop_cand_k3 = st.slider("Prop. cand. a K3", 0.0, 1.0, 0.25, 0.05)
+            prop_cand_k4 = st.slider("Prop. cand. a K4", 0.0, 1.0, 0.25, 0.05)
+        with colB:
+            prop_cand_k5 = st.slider("Prop. cand. a K5", 0.0, 1.0, 0.25, 0.05)
+            prop_cand_g1 = st.slider("Prop. cand. a G1", 0.0, 1.0, 0.25, 0.05)
+        
+        tasa_cont_k_to_g1 = st.slider("Tasa de continuidad K5 → 1°", 0.0, 1.0, 0.95, 0.01)
 
+    with st.expander("🧱 Crecimiento de Aulas (manual)", expanded=False):
+        manual_crecimiento = st.checkbox("Habilitar crecimiento manual", False)
+        solo_manual = st.checkbox("Usar SOLO plan manual (apaga trigger automático)", False)
+        colm1, colm2 = st.columns(2)
+        with colm1:
+            extra_div_k3_per_year = st.number_input("Aulas extra por año en K3", 0, 20, 0, 1)
+            extra_div_k4_per_year = st.number_input("Aulas extra por año en K4", 0, 20, 0, 1)
+        with colm2:
+            extra_div_k5_per_year = st.number_input("Aulas extra por año en K5", 0, 20, 0, 1)
+            extra_div_g1_per_year = st.number_input("Aulas extra por año en G1", 0, 20, 0, 1)
 
 # ---- Aplicar preset (sobrescribe variables leídas de sliders) ----
 if preset == "Exitoso":
@@ -163,6 +183,12 @@ p = Params(
     k_articulacion=k_articulacion, k_comunicacion=k_comunicacion, k_diferenciacion=k_diferenciacion,
     politica_seleccion=politica_seleccion, admitidos_max_abs=admitidos_max_abs, beta_demanda_calidad=beta_demanda_calidad, 
     delta_demanda_saturacion=delta_demanda_saturacion, piso_demanda_gap=piso_demanda_gap,
+    prop_cand_k3=prop_cand_k3, prop_cand_k4=prop_cand_k4, 
+    prop_cand_k5=prop_cand_k5, prop_cand_g1=prop_cand_g1, 
+    tasa_cont_k_to_g1=tasa_cont_k_to_g1,
+    manual_crecimiento=manual_crecimiento, solo_manual=solo_manual,
+    extra_div_k3_per_year=extra_div_k3_per_year, extra_div_k4_per_year=extra_div_k4_per_year,
+    extra_div_k5_per_year=extra_div_k5_per_year, extra_div_g1_per_year=extra_div_g1_per_year,
 )
 
 df, extras = simulate(p)
@@ -229,7 +255,8 @@ with tabs[2]:
     st.subheader("Distribución de alumnos por curso")
 
     G = extras["G"]
-    grades = [f"G{g}" for g in range(1, 13)]
+    # Orden explícito de columnas del heatmap
+    grades = ["K3", "K4", "K5"] + [f"G{g}" for g in range(1, 13)]
 
     heat_df = pd.DataFrame(G, columns=grades)
     heat_df["anio"] = df["anio"]
