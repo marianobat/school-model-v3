@@ -83,62 +83,66 @@ p = Params(
 
 df, extras = simulate(p)
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Alumnos actuales", f"{int(df['alumnos_totales'].iloc[-1])}")
-col2.metric("Calidad (último año)", f"{df['calidad'].iloc[-1]:.2f}")
-col3.metric("Aulas totales", f"{int(df['AulasTotales'].iloc[-1])}")
-cap_bind = "Sí" if df['capacidad_binding'].iloc[-1] == 1 else "No"
-col4.metric("¿Limita la Capacidad?", cap_bind)
+# --- BLOQUE NUEVO: pestañas de visualización ---
+tabs = st.tabs([
+    "📈 Evolución general",
+    "💰 Finanzas",
+    "🎓 Distribución por curso"
+])
 
-st.subheader("Evolución de alumnos")
-st.line_chart(df.set_index("anio")[["alumnos_totales"]])
-
-st.subheader("Calidad vs Tasa de bajas")
-st.line_chart(df.set_index("anio")[["calidad","tasa_bajas"]])
-
-st.subheader("Candidatos: pagados vs orgánicos")
-st.line_chart(df.set_index("anio")[["candidatos_pago","candidatos_organico"]])
-
-# --- NUEVO: Facturación, costos fijos y margen de gestión ---
-st.subheader("Facturación, costos fijos y margen de gestión")
-
-# Costos fijos = sueldos_docentes + sueldos_no_docentes (este último es un parámetro constante)
-costos_fijos = df["sueldos_docentes"] + extras["params"]["sueldos_no_docentes"]
-
-# Margen de gestión = facturación - costos_totales (como está definido en el modelo)
-margen_gestion = df["facturacion"] - df["costos_totales"]
-
-fin_df = (
-    pd.DataFrame({
-        "anio": df["anio"],
-        "Facturación": df["facturacion"],
-        "Costos fijos": costos_fijos,
-        "Margen de gestión": margen_gestion
-    })
-    .set_index("anio")
-)
-
-st.line_chart(fin_df)
-
-# --- NUEVO: Solapa con mapa de calor de alumnos por curso ---
-st.subheader("Distribución de alumnos por curso")
-
-tabs = st.tabs(["Mapa de calor (Alumnos por grado)"])
-
+# --- 📈 TAB 1: Evolución general ---
 with tabs[0]:
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Alumnos actuales", f"{int(df['alumnos_totales'].iloc[-1])}")
+    col2.metric("Calidad (último año)", f"{df['calidad'].iloc[-1]:.2f}")
+    col3.metric("Aulas totales", f"{int(df['AulasTotales'].iloc[-1])}")
+    cap_bind = "Sí" if df['capacidad_binding'].iloc[-1] == 1 else "No"
+    col4.metric("¿Limita la Capacidad?", cap_bind)
+
+    st.subheader("Evolución de alumnos")
+    st.line_chart(df.set_index("anio")[["alumnos_totales"]])
+
+    st.subheader("Calidad vs Tasa de bajas")
+    st.line_chart(df.set_index("anio")[["calidad","tasa_bajas"]])
+
+    st.subheader("Candidatos: pagados vs orgánicos")
+    st.line_chart(df.set_index("anio")[["candidatos_pago","candidatos_organico"]])
+
+
+# --- 💰 TAB 2: Finanzas ---
+with tabs[1]:
+    st.subheader("Facturación, costos fijos y margen de gestión")
+    costos_fijos = df["sueldos_docentes"] + extras["params"]["sueldos_no_docentes"]
+    margen_gestion = df["facturacion"] - df["costos_totales"]
+
+    fin_df = (
+        pd.DataFrame({
+            "anio": df["anio"],
+            "Facturación": df["facturacion"],
+            "Costos fijos": costos_fijos,
+            "Margen de gestión": margen_gestion
+        })
+        .set_index("anio")
+    )
+
+    st.line_chart(fin_df)
+
+
+# --- 🎓 TAB 3: Distribución por curso (mapa de calor) ---
+with tabs[2]:
     import altair as alt
 
-    # extras["G"] tiene la matriz (anios x 12) de alumnos por grado
-    G = extras["G"]  # shape: (anios, 12)
+    st.subheader("Distribución de alumnos por curso")
+
+    G = extras["G"]
     grades = [f"G{g}" for g in range(1, 13)]
 
     heat_df = pd.DataFrame(G, columns=grades)
     heat_df["anio"] = df["anio"]
 
-    # Pasamos a formato largo para el heatmap
+    # Pasamos a formato largo
     long = heat_df.melt(id_vars="anio", var_name="grado", value_name="alumnos")
 
-    # Mapa de calor con Altair
     heatmap = (
         alt.Chart(long)
         .mark_rect()
@@ -152,7 +156,6 @@ with tabs[0]:
     )
 
     st.altair_chart(heatmap, use_container_width=True)
-
 
 
 with st.expander("📊 Ver tabla completa"):
