@@ -222,17 +222,29 @@ with tabs[0]:
     st.line_chart(df.set_index("anio")[["calidad","tasa_bajas"]])
     
     st.subheader("Demanda, candidatos, aceptados y bajas")
-    cand_total = df["nuevos_candidatos"]
+
+    # Detectar columna de bajas o calcular fallback
+    posibles_bajas = ["bajas_tot", "bajas_totales", "bajas", "egresos"]
+    col_bajas = next((c for c in posibles_bajas if c in df.columns), None)
+    
+    if col_bajas is None:
+        # Fallback consistente con el modelo: tasa_bajas * alumnos_totales
+        # (y redondeamos porque son personas)
+        df["bajas_totales"] = (df["tasa_bajas"] * df["alumnos_totales"]).round().astype(int)
+        col_bajas = "bajas_totales"
+    
+    # Construir el dataframe para el gráfico
     plot_df = (
         pd.DataFrame({
             "anio": df["anio"],
             "Demanda potencial": df["Demanda"],
-            "Candidatos": cand_total,
+            "Candidatos": df["nuevos_candidatos"],
             "Aceptados": df["admitidos"],
-            "Bajas": df["bajas_tot"],   # 👈 agregamos esta línea
+            "Bajas": df[col_bajas],
         })
         .set_index("anio")
     )
+    
     st.line_chart(plot_df)
 
 
