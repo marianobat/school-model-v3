@@ -221,19 +221,19 @@ with tabs[0]:
     st.subheader("Calidad vs Tasa de bajas")
     st.line_chart(df.set_index("anio")[["calidad","tasa_bajas"]])
     
+
     import altair as alt
     
     st.subheader("Demanda, candidatos, aceptados y bajas")
     
-    # Detectar o calcular columna de bajas
+    # 1) Detectar/crear la columna de bajas con nombre estable
     posibles_bajas = ["bajas_tot", "bajas_totales", "bajas", "egresos"]
     col_bajas = next((c for c in posibles_bajas if c in df.columns), None)
-    
     if col_bajas is None:
         df["bajas_totales"] = (df["tasa_bajas"] * df["alumnos_totales"]).round().astype(int)
         col_bajas = "bajas_totales"
     
-    # Crear DataFrame base
+    # 2) Renombrar a etiquetas EXACTAS que usaremos en la paleta
     plot_df = df[["anio", "Demanda", "nuevos_candidatos", "admitidos", col_bajas]].rename(
         columns={
             "Demanda": "Demanda potencial",
@@ -243,16 +243,19 @@ with tabs[0]:
         }
     )
     
-    # Transformar a formato largo (para Altair)
+    # 3) A formato largo
     long_df = plot_df.melt(id_vars="anio", var_name="Serie", value_name="Valor")
     
-    # Definir colores específicos
+    # (Diagnóstico rápido: mostrará las series que ve Altair)
+    # st.write("Series detectadas:", long_df["Serie"].unique().tolist())
+    
+    # 4) Paleta de colores específica (celeste, azul, verde, rojo)
     colores = alt.Scale(
         domain=["Demanda potencial", "Candidatos", "Aceptados", "Bajas"],
-        range=["#4FC3F7", "#0288D1", "#2E7D32", "#D32F2F"]  # celeste, azul, verde, rojo
+        range=["#4FC3F7", "#0288D1", "#2E7D32", "#D32F2F"]
     )
     
-    # Crear gráfico con líneas y puntos
+    # 5) Gráfico con líneas + puntos
     chart = (
         alt.Chart(long_df)
         .mark_line(point=True, strokeWidth=2)
