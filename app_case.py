@@ -254,49 +254,55 @@ with tabs[1]:
     st.line_chart(fin_df)
 
 
-# --- 🎓 TAB 3: Distribución por curso (mapa de calor) ---
+# --- 🎓 TAB 3: Distribución de alumnos por curso (heatmap vertical invertido) ---
 with tabs[2]:
     import altair as alt
 
     st.subheader("Distribución de alumnos por curso")
 
-    # Orden ideal de grados
+    # Orden deseado de cursos (de abajo a arriba)
     ideal_grades = ["K3", "K4", "K5"] + [f"G{g}" for g in range(1, 13)]
 
-    # Si el modelo expone nombres de grados, usalos; si no, inferí por columnas
+    # Tomar los nombres reales desde el modelo si existen
     grade_names = extras.get("grade_names", None)
     if grade_names is None:
-        # Inferencia: si G tiene 15 columnas asumimos K3..K5 + G1..G12; si tiene 12 columnas: G1..G12
         ncols = extras["G"].shape[1]
         if ncols == 15:
-            grade_names = ideal_grades[:]                      # K3..K5, G1..G12
+            grade_names = ideal_grades[:]  # Kinder + G1..G12
         else:
-            grade_names = [f"G{g}" for g in range(1, 13)]      # solo G1..G12
+            grade_names = [f"G{g}" for g in range(1, 13)]  # Solo G1..G12
 
-    # Reordenar en el orden ideal (filtra si faltan)
+    # Mantener sólo los grados disponibles, en el orden correcto
     ordered = [g for g in ideal_grades if g in grade_names]
 
+    # Construir DataFrame
     G = extras["G"]
-    # Asegurar consistencia de columnas con 'ordered'
     heat_df = pd.DataFrame(G, columns=grade_names).reindex(columns=ordered)
-    heat_df["anio"] = df["anio"]
+    heat_df["Año"] = df["anio"]
 
-    long = heat_df.melt(id_vars="anio", var_name="grado", value_name="alumnos")
+    # Pasar a formato largo
+    long_df = heat_df.melt(id_vars="Año", var_name="Curso", value_name="Alumnos")
 
-    # Categórico ordenado para que G10..G12 queden al final y K3..K5 al inicio
-    long["grado"] = pd.Categorical(long["grado"], categories=ordered, ordered=True)
+    # Forzar orden de cursos (de abajo a arriba)
+    long_df["Curso"] = pd.Categorical(long_df["Curso"], categories=ordered, ordered=True)
 
+    # Crear heatmap con años en eje X y cursos en eje Y (invertido)
     heatmap = (
-        alt.Chart(long)
+        alt.Chart(long_df)
         .mark_rect()
         .encode(
-            x=alt.X("grado:O", title="Grado"),
-            y=alt.Y("anio:O", title="Año"),
-            color=alt.Color("alumnos:Q", title="Alumnos"),
-            tooltip=["anio", "grado", "alumnos"]
+            x=alt.X("Año:O", title="Año"),
+            y=alt.Y(
+                "Curso:O",
+                title="Curso",
+                sort=ordered[::-1],  # 🔁 invertimos el orden para que K3 quede abajo y G12 arriba
+            ),
+            color=alt.Color("Alumnos:Q", title="Alumnos"),
+            tooltip=["Año", "Curso", "Alumnos"],
         )
-        .properties(height=320)
+        .properties(height=420)
     )
+
     st.altair_chart(heatmap, use_container_width=True)
 
 
