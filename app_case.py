@@ -221,32 +221,51 @@ with tabs[0]:
     st.subheader("Calidad vs Tasa de bajas")
     st.line_chart(df.set_index("anio")[["calidad","tasa_bajas"]])
     
+    import altair as alt
+    
     st.subheader("Demanda, candidatos, aceptados y bajas")
-
-    # Detectar columna de bajas o calcular fallback
+    
+    # Detectar o calcular columna de bajas
     posibles_bajas = ["bajas_tot", "bajas_totales", "bajas", "egresos"]
     col_bajas = next((c for c in posibles_bajas if c in df.columns), None)
     
     if col_bajas is None:
-        # Fallback consistente con el modelo: tasa_bajas * alumnos_totales
-        # (y redondeamos porque son personas)
         df["bajas_totales"] = (df["tasa_bajas"] * df["alumnos_totales"]).round().astype(int)
         col_bajas = "bajas_totales"
     
-    # Construir el dataframe para el gráfico
-    plot_df = (
-        pd.DataFrame({
-            "anio": df["anio"],
-            "Demanda potencial": df["Demanda"],
-            "Candidatos": df["nuevos_candidatos"],
-            "Aceptados": df["admitidos"],
-            "Bajas": df[col_bajas],
-        })
-        .set_index("anio")
+    # Crear DataFrame base
+    plot_df = df[["anio", "Demanda", "nuevos_candidatos", "admitidos", col_bajas]].rename(
+        columns={
+            "Demanda": "Demanda potencial",
+            "nuevos_candidatos": "Candidatos",
+            "admitidos": "Aceptados",
+            col_bajas: "Bajas",
+        }
     )
     
-    st.line_chart(plot_df)
-
+    # Transformar a formato largo (para Altair)
+    long_df = plot_df.melt(id_vars="anio", var_name="Serie", value_name="Valor")
+    
+    # Definir colores específicos
+    colores = alt.Scale(
+        domain=["Demanda potencial", "Candidatos", "Aceptados", "Bajas"],
+        range=["#4FC3F7", "#0288D1", "#2E7D32", "#D32F2F"]  # celeste, azul, verde, rojo
+    )
+    
+    # Crear gráfico con líneas y puntos
+    chart = (
+        alt.Chart(long_df)
+        .mark_line(point=True, strokeWidth=2)
+        .encode(
+            x=alt.X("anio:O", title="Año"),
+            y=alt.Y("Valor:Q", title="Cantidad"),
+            color=alt.Color("Serie:N", scale=colores, title="Serie"),
+            tooltip=["anio", "Serie", "Valor"],
+        )
+        .properties(height=340)
+    )
+    
+    st.altair_chart(chart, use_container_width=True)
 
 # --- 💰 TAB 2: Finanzas ---
 with tabs[1]:
