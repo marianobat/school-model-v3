@@ -254,7 +254,7 @@ with tabs[1]:
     st.line_chart(fin_df)
 
 
-# --- 🎓 TAB 3: Distribución de alumnos por curso (heatmap vertical invertido) ---
+# --- 🎓 TAB 3: Distribución de alumnos por curso (heatmap con etiquetas + total por año) ---
 with tabs[2]:
     import altair as alt
 
@@ -263,48 +263,90 @@ with tabs[2]:
     # Orden deseado de cursos (de abajo a arriba)
     ideal_grades = ["K3", "K4", "K5"] + [f"G{g}" for g in range(1, 13)]
 
-    # Tomar los nombres reales desde el modelo si existen
+    # Tomar nombres reales desde el modelo (si vienen) o inferir por ancho de G
     grade_names = extras.get("grade_names", None)
     if grade_names is None:
         ncols = extras["G"].shape[1]
-        if ncols == 15:
-            grade_names = ideal_grades[:]  # Kinder + G1..G12
-        else:
-            grade_names = [f"G{g}" for g in range(1, 13)]  # Solo G1..G12
+        grade_names = ideal_grades[:] if ncols == 15 else [f"G{g}" for g in range(1, 13)]
 
     # Mantener sólo los grados disponibles, en el orden correcto
     ordered = [g for g in ideal_grades if g in grade_names]
 
-    # Construir DataFrame
-    G = extras["G"]
+    # Construir DataFrame largo
+    G = extras["G"]  # (anios x N_GRADES), ya redondeado a enteros si aplicaste el patch de modelo
     heat_df = pd.DataFrame(G, columns=grade_names).reindex(columns=ordered)
     heat_df["Año"] = df["anio"]
-
-    # Pasar a formato largo
     long_df = heat_df.melt(id_vars="Año", var_name="Curso", value_name="Alumnos")
-
-    # Forzar orden de cursos (de abajo a arriba)
+    # Forzar orden en eje Y invertido (K3 abajo, G12 arriba)
     long_df["Curso"] = pd.Categorical(long_df["Curso"], categories=ordered, ordered=True)
 
-    # Crear heatmap con años en eje X y cursos en eje Y (invertido)
-    heatmap = (
+    # Dominio explícito de años para alinear heatmap y totalizador
+    years_domain = list(df["anio"].tolist())
+
+    # Toggle para mostrar/ocultar números en cada celda (por si hay muchos)
+    show_numbers = st.checkbox("Mostrar números en cada celda", value=True)
+
+    # --- HEATMAP ---
+    heat = (
         alt.Chart(long_df)
         .mark_rect()
         .encode(
-            x=alt.X("Año:O", title="Año"),
-            y=alt.Y(
-                "Curso:O",
-                title="Curso",
-                sort=ordered[::-1],  # 🔁 invertimos el orden para que K3 quede abajo y G12 arriba
-            ),
+            x=alt.X("Año:O", title="Año", sort=years_domain, scale=alt.Scale(domain=years_domain)),
+            y=alt.Y("Curso:O", title="Curso", sort=ordered[::-1]),  # invertido: kinder abajo
             color=alt.Color("Alumnos:Q", title="Alumnos"),
-            tooltip=["Año", "Curso", "Alumnos"],
+            tooltip=["Año", "Curso", "Alumnos"]
         )
         .properties(height=420)
     )
 
-    st.altair_chart(heatmap, use_container_width=True)
+    # Capa de etiquetas (números por celda)
+    labels = (
+        alt.Chart(long_df)
+        .mark_text(baseline="middle", align="center", fontSize=11)
+        .encode(
+            x=alt.X("Año:O", sort=years_domain),
+            y=alt.Y("Curso:O", sort=ordered[::-1]),
+            text=alt.Text("Alumnos:Q", format=".0f"),
+            # Si querés contraste dinámico, podés condicionar el color según 'Alumnos'
+            color=alt.value("black"),
+            tooltip=["Año", "Curso", "Alumnos"]
+        )
+    )
 
+    heatmap_chart = heat + (labels if show_numbers else alt.Chart())
+
+    # --- TOTALIZADOR POR COLUMNA (suma de todos los cursos por año) ---
+    totals_df = (
+        long_df.groupby("Año", as_index=False)["Alumnos"].sum()
+        .rename(columns={"Alumnos": "Total alumnos"})
+    )
+
+    bars = (
+        alt.Chart(totals_df)
+        .mark_bar()
+        .encode(
+            x=alt.X("Año:O", sort=years_domain, scale=alt.Scale(domain=years_domain)),
+            y=alt.Y("Total alumnos:Q", title="Total alumnos"),
+            tooltip=["Año", "Total alumnos"]
+        )
+        .properties(height=160)
+    )
+
+    bars_labels = (
+        alt.Chart(totals_df)
+        .mark_text(dy=-8, fontSize=11)
+        .encode(
+            x=alt.X("Año:O", sort=years_domain),
+            y="Total alumnos:Q",
+            text=alt.Text("Total alumnos:Q", format=".0f")
+        )
+    )
+
+    totalizer_chart = bars + bars_labels
+
+    # --- Mostrar verticalmente: heatmap arriba + totalizador abajo ---
+    st.altair_chart(alt.vconcat(heatmap_chart, totalizer_chart).resolve_scale(x='shared'), use_container_width=True)
+    
 
 with st.expander("📊 Ver tabla completa"):
     st.dataframe(df)
