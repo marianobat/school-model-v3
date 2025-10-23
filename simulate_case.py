@@ -318,11 +318,32 @@ def simulate(par: Params) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     costos = sueldos_docentes + par.sueldos_no_docentes + par.mantenimiento_prop * facturacion + Marketing
     resultado = facturacion - costos - inv_infra
 
+    # --- Egresados por año (los G12 del año anterior, luego de bajas del año anterior) ---
+    iG12 = GRADE_INDEX["G12"]
+    egresados = np.zeros(par.anios, dtype=float)
+    
+    for t in range(par.anios):
+        if t == 0:
+            egresados[t] = 0.0  # no hay egresados en el año 0
+        else:
+            G12_prev = float(G[t-1, iG12])
+            tasa_prev = float(tasa_bajas[t-1])
+            egresados[t] = max(G12_prev * (1.0 - tasa_prev), 0.0)
+    
+    # opcional: redondeo “seguro” a enteros no negativos
+    egresados = np.maximum(np.rint(egresados), 0).astype(int)
+    
+    # (recomendado) también exponer las bajas totales del año para auditoría
+    bajas_totales = (tasa_bajas * G.sum(axis=1))
+    bajas_totales = np.maximum(np.rint(bajas_totales), 0).astype(int)
+
     df = pd.DataFrame({
         "anio": np.arange(par.anios),
         "alumnos_totales": alumnos_tot,
         "calidad": calidad,
         "tasa_bajas": tasa_bajas,
+        "bajas_totales": bajas_totales,   # nuevo (útil para auditoría)
+        "egresados": egresados,          # <<— NUEVO
         "nuevos_candidatos": nuevos_candidatos,
         "candidatos_pago": candidatos_pago,
         "candidatos_organico": candidatos_organico,
