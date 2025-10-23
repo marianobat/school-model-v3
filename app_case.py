@@ -270,6 +270,44 @@ with tabs[0]:
     
     st.altair_chart(chart, use_container_width=True)
 
+
+st.markdown("### 🔎 Diagnóstico de flujos (balance anual)")
+
+# Garantizar columna de bajas estable
+col_bajas = "bajas_totales" if "bajas_totales" in df.columns else ("bajas_tot" if "bajas_tot" in df.columns else None)
+if col_bajas is None:
+    df["bajas_totales"] = (df["tasa_bajas"] * df["alumnos_totales"]).round().astype(int)
+    col_bajas = "bajas_totales"
+
+# Series base
+A_t   = df["alumnos_totales"].astype(float)
+A_t1  = df["alumnos_totales"].shift(-1).astype(float)  # siguiente año
+B_t   = df[col_bajas].astype(float)                    # bajas
+Adm_t = df["admitidos"].astype(float)                  # admitidos totales (todos los grados de entrada)
+
+# Graduados residuales y error de balance
+Grad_t = (A_t - B_t + Adm_t - A_t1).round(2)
+Balance_err = (A_t1 - (A_t - B_t - Grad_t + Adm_t)).round(2)
+
+diag = pd.DataFrame({
+    "Año": df["anio"],
+    "Alumnos_t": A_t,
+    "Alumnos_t+1": A_t1,
+    "Bajas_t": B_t,
+    "Admitidos_t": Adm_t,
+    "Graduados_t (residual)": Grad_t,
+    "Error balance": Balance_err
+})
+
+st.dataframe(diag)
+
+# Regla simple: si el error promedio (excepto último año) es pequeño, está bien
+err_ok = Balance_err.iloc[:-1].abs().mean() if len(Balance_err) > 1 else 0.0
+st.caption(f"Error promedio de balance (excluye último año): {err_ok:.2f} (≈ 0 es OK; pequeños desvíos pueden ser por redondeos)")
+
+
+
+
 # --- 💰 TAB 2: Finanzas ---
 with tabs[1]:
     st.subheader("Facturación, costos fijos y margen de gestión")
