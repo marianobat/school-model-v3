@@ -220,7 +220,7 @@ with tabs[0]:
 
     st.subheader("Calidad vs Tasa de bajas")
     st.line_chart(df.set_index("anio")[["calidad","tasa_bajas"]])
-
+    
     st.subheader("Demanda, candidatos, aceptados y bajas")
     cand_total = df["nuevos_candidatos"]
     plot_df = (
@@ -229,7 +229,7 @@ with tabs[0]:
             "Demanda potencial": df["Demanda"],
             "Candidatos": cand_total,
             "Aceptados": df["admitidos"],
-            "Bajas": bajas_totales,
+            "Bajas": df["bajas_totales"],   # 👈 agregamos esta línea
         })
         .set_index("anio")
     )
