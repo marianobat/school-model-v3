@@ -229,7 +229,7 @@ with tabs[0]:
             "Demanda potencial": df["Demanda"],
             "Candidatos": cand_total,
             "Aceptados": df["admitidos"],
-            "Bajas": df["bajas_totales"],   # 👈 agregamos esta línea
+            "Bajas": df["bajas_tot"],   # 👈 agregamos esta línea
         })
         .set_index("anio")
     )
