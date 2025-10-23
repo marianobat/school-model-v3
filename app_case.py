@@ -252,7 +252,7 @@ with tabs[0]:
     # 4) Paleta de colores específica (celeste, azul, verde, rojo)
     colores = alt.Scale(
         domain=["Demanda potencial", "Candidatos", "Aceptados", "Bajas"],
-        range=["#4FC3F7", "#0288D1", "#2E7D32", "#D32F2F"]
+        range=["#0288D1", "#4FC3F7", "#2E7D32", "#D32F2F"]
     )
     
     # 5) Gráfico con líneas + puntos
